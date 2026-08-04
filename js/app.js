@@ -76,6 +76,25 @@ CHAPTERS.forEach((ch) => {
 PAGES.push({ id: "certificate", type: "certificate" });
 PAGES.push({ id: "onecard", type: "onecard" });
 
+/* One-time stable numbering pass over every video/visual placeholder, for
+   production identification. Runs once at load so the number a block gets
+   never changes on revisit (a live per-render counter would, since only
+   the current page's blocks render each time). */
+(function numberVisualBlocks() {
+  let n = 0;
+  CHAPTERS.forEach((ch) => {
+    ch.screens.forEach((screen) => {
+      (screen.blocks || []).forEach((block) => {
+        if (block.t === "visual") {
+          n += 1;
+          block._videoNum = n;
+          block._videoLoc = `Ch ${ch.num} · ${screen.id}`;
+        }
+      });
+    });
+  });
+})();
+
 function currentPage() { return PAGES[state.currentIndex]; }
 
 const stage = document.getElementById("stage");
@@ -487,9 +506,17 @@ function renderVisualBlock(block, page) {
   const div = document.createElement("div");
   div.className = "block";
   const slotId = `video-${page.id}`;
+  const tag = block._videoNum
+    ? `<div class="video-slot-tag">Video ${block._videoNum} — ${escapeHtml(block._videoLoc)}</div>`
+    : "";
+  const player = block.video
+    ? `<video class="video-slot-player" src="${escapeHtml(block.video)}" controls preload="metadata"></video>`
+    : "";
   div.innerHTML = `
     <div class="video-slot" data-video-slot="${slotId}">
+      ${tag}
       <div class="video-slot-head">${svgIcon("video", 16)}${block.heading ? escapeHtml(block.heading.replace(/^\[|\]$/g, "")) : "Video / visual — placeholder"}</div>
+      ${player}
       ${block.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("")}
     </div>`;
   return div;
@@ -1301,7 +1328,7 @@ function loadImage(src) {
 }
 
 async function buildOneCardCanvas() {
-  const W = 1080, H = 1440, PAD = 80;
+  const W = 1080, H = 1620, PAD = 80;
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
@@ -1365,7 +1392,7 @@ async function buildOneCardCanvas() {
     loadImage("img/child-line.jpg"),
     loadImage("img/singapen-helpline.png")
   ]);
-  const logoH = 96;
+  const logoH = 260;
   const logos = [childLineImg, singapenImg].filter(Boolean);
   if (logos.length) {
     y += 30;
