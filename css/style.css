@@ -400,7 +400,7 @@ body{
 .cert-emblem-img{width:72px;height:72px;object-fit:contain;border-radius:8px;background:#fff;padding:2px}
 .cert-emblem-label{font-size:.62rem;line-height:1.2;color:var(--text-mute);text-align:center;font-weight:600}
 .cert-id{text-align:center;font-size:.66rem;letter-spacing:.04em;color:var(--text-mute);font-family:'Courier New',monospace;margin-bottom:6px}
-.cert-id-footer{margin:26px 0 0;padding-top:14px;border-top:1px dashed var(--border)}
+.cert-id-footer{margin:10px 0 0}
 .cert-badge{display:flex;justify-content:center;color:var(--gold);margin-bottom:4px}
 .cert-badge svg{width:34px;height:34px}
 .cert-title{font-size:1.5rem;color:var(--navy);font-weight:800;margin:8px 0 0;font-family:Georgia,serif;letter-spacing:.02em}
