@@ -48,19 +48,35 @@ const progressLabel = document.getElementById("progressLabel");
 const chapterListEl = document.getElementById("chapterList");
 
 
-/* ---------------- Confetti ---------------- */
-function confettiAt(el, big) {
-  if (typeof confetti !== "function" || !el) return;
+/* ---------------- Confetti ----------------
+   Accepts either the actual click/tap event (preferred — bursts exactly
+   under the finger/cursor) or an Element (falls back to that element's
+   centre, for the few places with no originating event, like the
+   certificate appearing after a delay). Passing a big container element
+   here was the bug: confetti would center on the whole card/box instead
+   of wherever the learner actually pressed. */
+function confettiAt(target, big) {
+  if (typeof confetti !== "function" || !target) return;
   try {
-    const rect = el.getBoundingClientRect();
+    let x, y;
+    if (typeof target.clientX === "number" && typeof target.clientY === "number") {
+      x = target.clientX;
+      y = target.clientY;
+    } else if (typeof target.getBoundingClientRect === "function") {
+      const rect = target.getBoundingClientRect();
+      x = rect.left + rect.width / 2;
+      y = rect.top + rect.height / 2;
+    } else {
+      return;
+    }
     confetti({
       particleCount: big ? 110 : 45,
       spread: big ? 90 : 60,
       startVelocity: big ? 42 : 28,
       scalar: big ? 0.95 : 0.8,
       origin: {
-        x: (rect.left + rect.width / 2) / window.innerWidth,
-        y: (rect.top + rect.height / 2) / window.innerHeight
+        x: x / window.innerWidth,
+        y: y / window.innerHeight
       }
     });
   } catch (e) { /* best-effort only */ }
@@ -627,7 +643,7 @@ function renderFlipDeck(container, page, block, setInteractionCheck) {
       const allOpen = block.data.items.every((_, idx) => revealed[idx]);
       if (allOpen) {
         SFX.complete();
-        confettiAt(container, false);
+        confettiAt(ev, false);
       }
       notify(document.querySelector("#stage .page"));
     });
@@ -690,10 +706,10 @@ function renderSortDrag(container, page, block, setInteractionCheck) {
     setTimeout(() => el.classList.remove("flash-correct", "flash-wrong"), 700);
   }
 
-  function checkComplete() {
+  function checkComplete(lastDropTarget) {
     const allCorrect = block.data.items.every((item, i) => placements[i] === item.bin);
     notify(document.querySelector("#stage .page"));
-    if (allCorrect) { SFX.complete(); confettiAt(bins, true); }
+    if (allCorrect) { SFX.complete(); confettiAt(lastDropTarget || bins, true); }
     return allCorrect;
   }
 
@@ -739,7 +755,7 @@ function renderSortDrag(container, page, block, setInteractionCheck) {
             x: "+=" + (targetRect.left + targetRect.width / 2 - (elRect.left + elRect.width / 2)),
             y: "+=" + (targetRect.top + targetRect.height / 2 - (elRect.top + elRect.height / 2)),
             scale: 0.85, autoAlpha: 0, duration: 0.35, ease: "power1.in",
-            onComplete: () => { dragInstance.kill(); el.remove(); renderPlacedChip(item); checkComplete(); }
+            onComplete: () => { dragInstance.kill(); el.remove(); renderPlacedChip(item); checkComplete(dropArea); }
           });
         } else {
           SFX.incorrect();
@@ -804,13 +820,13 @@ function renderNumberPick(container, page, block, setInteractionCheck) {
   if (state.sliderRevealed[key]) showReveal();
   else revealBtn.disabled = state.sliderValue[key] === undefined;
 
-  revealBtn.addEventListener("click", () => {
+  revealBtn.addEventListener("click", (ev) => {
     if (state.sliderValue[key] === undefined) return;
     state.sliderRevealed[key] = true;
     saveState();
     SFX.complete();
     showReveal();
-    confettiAt(box, false);
+    confettiAt(ev, false);
     notify(document.querySelector("#stage .page"));
   });
 
@@ -849,12 +865,12 @@ function renderMultiSelectCase(container, page, block, setInteractionCheck) {
       btn.className = "btn btn-primary";
       btn.style.marginTop = "12px";
       btn.textContent = "Submit";
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (ev) => {
         state.caseSubmitted[key] = true;
         saveState();
         SFX.complete();
+        confettiAt(ev, false);
         draw();
-        confettiAt(box, false);
         notify(document.querySelector("#stage .page"));
       });
       box.appendChild(btn);
@@ -881,12 +897,12 @@ function renderCommitment(container, page, block, setInteractionCheck) {
     ${done ? `<div class="commit-confirmed-note">You've confirmed you understand this law applies to you.</div>` : ""}
   `;
   container.appendChild(box);
-  box.querySelector("#commitBtn").addEventListener("click", () => {
+  box.querySelector("#commitBtn").addEventListener("click", (ev) => {
     if (state.commitDone[key]) return;
     state.commitDone[key] = true;
     saveState();
     SFX.confirm();
-    confettiAt(box, false);
+    confettiAt(ev, false);
     notify(document.querySelector("#stage .page"));
     render();
   });
