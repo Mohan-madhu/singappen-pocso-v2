@@ -509,14 +509,19 @@ function renderVisualBlock(block, page) {
   const tag = block._videoNum
     ? `<div class="video-slot-tag">Video ${block._videoNum} — ${escapeHtml(block._videoLoc)}</div>`
     : "";
-  const player = block.video
-    ? `<video class="video-slot-player" src="${escapeHtml(block.video)}" controls preload="metadata"></video>`
-    : "";
+  if (block.video) {
+    const player = `<video class="video-slot-player" src="${escapeHtml(block.video)}" controls autoplay muted playsinline loop preload="auto"></video>`;
+    div.innerHTML = `
+      <div class="video-slot video-slot-has-video" data-video-slot="${slotId}">
+        ${tag}
+        ${player}
+      </div>`;
+    return div;
+  }
   div.innerHTML = `
     <div class="video-slot" data-video-slot="${slotId}">
       ${tag}
       <div class="video-slot-head">${svgIcon("video", 16)}${block.heading ? escapeHtml(block.heading.replace(/^\[|\]$/g, "")) : "Video / visual — placeholder"}</div>
-      ${player}
       ${block.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("")}
     </div>`;
   return div;
