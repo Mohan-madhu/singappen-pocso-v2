@@ -2,6 +2,45 @@
 
 if (typeof gsap !== "undefined" && typeof Draggable !== "undefined") gsap.registerPlugin(Draggable, ScrollTrigger);
 
+/* Shown in the footer while an interaction is still incomplete — rotates
+   randomly so it doesn't read as a static scold every time the learner
+   glances down. */
+const ENCOURAGE_MESSAGES = [
+  "Keep going — you're almost there.",
+  "Good work so far — finish this up to continue.",
+  "Nice progress. Just this one left.",
+  "You're doing fine — complete this to move on.",
+  "Almost done with this part.",
+  "Keep at it — one more step.",
+  "Fantastic — just wrap this up.",
+  "You've got this.",
+  "Stay with it — nearly there.",
+  "Great pace — finish this to continue.",
+  "One more tap and you're through.",
+  "Doing well — complete this above to continue.",
+  "Nearly there — don't stop now.",
+  "Solid work — just this left.",
+  "Keep it up.",
+  "You're close — finish above to continue.",
+  "Good — a little more to go.",
+  "Almost through this section.",
+  "Well done so far — one step left.",
+  "Steady progress — keep going.",
+  "This is the last bit — you've got it.",
+  "Nicely done — complete this to move ahead.",
+  "Just a little further.",
+  "You're on track — finish this up.",
+  "Great job — one more thing above.",
+  "Hang in there — nearly done.",
+  "Making good progress — keep going.",
+  "Almost — finish the interaction above.",
+  "You're nearly through this screen.",
+  "Keep pushing — this is the last step here."
+];
+function randomEncourageMessage() {
+  return ENCOURAGE_MESSAGES[Math.floor(Math.random() * ENCOURAGE_MESSAGES.length)];
+}
+
 const STORAGE_KEY = "pocso_adult_progress_v1";
 
 const state = loadState() || {
@@ -79,6 +118,20 @@ function confettiAt(target, big) {
         y: y / window.innerHeight
       }
     });
+  } catch (e) { /* best-effort only */ }
+}
+
+/* A bigger, distinct celebration for finishing a whole chapter: three
+   staggered bursts (left/centre/right) instead of one, plus its own
+   fanfare rather than reusing the single-exercise "complete" sound. */
+function chapterCompleteCelebration() {
+  SFX.chapterComplete();
+  if (typeof confetti !== "function") return;
+  try {
+    const y = 0.35;
+    confetti({ particleCount: 90, spread: 70, startVelocity: 40, origin: { x: 0.2, y } });
+    setTimeout(() => confetti({ particleCount: 130, spread: 100, startVelocity: 48, origin: { x: 0.5, y } }), 120);
+    setTimeout(() => confetti({ particleCount: 90, spread: 70, startVelocity: 40, origin: { x: 0.8, y } }), 240);
   } catch (e) { /* best-effort only */ }
 }
 
@@ -182,11 +235,11 @@ function updateProgress() {
 
 /* ---------------- Navigation ---------------- */
 btnBack.addEventListener("click", () => {
-  SFX.click(); Speech.stop();
+  SFX.navBack(); Speech.stop();
   if (state.currentIndex > 0) { state.currentIndex--; saveState(); render(); }
 });
 btnNext.addEventListener("click", () => {
-  SFX.click(); Speech.stop();
+  SFX.navNext(); Speech.stop();
   state.completedPages[currentPage().id] = true;
   saveState();
   if (state.currentIndex < PAGES.length - 1) { state.currentIndex++; saveState(); render(); }
@@ -249,8 +302,10 @@ function render() {
   // page) instead, since the sidebar-independent-scroll shell only applies
   // at the desktop breakpoint. Both calls are harmless no-ops when that
   // element isn't the actual scroll container.
-  if (typeof stage.scrollTo === "function") stage.scrollTo({ top: 0, behavior: "smooth" }); else stage.scrollTop = 0;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Instant, not smooth — the learner should land at the top of the new
+  // screen immediately, not watch it scroll there.
+  stage.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
 
 /* ================================================================
@@ -360,7 +415,7 @@ function renderScreenPage(page, wrap) {
   function checkComplete() {
     const ok = interactionCheck ? interactionCheck() : true;
     btnNext.disabled = !ok;
-    footerMsg.textContent = ok ? "" : "Complete the interaction above to continue";
+    footerMsg.textContent = ok ? "" : randomEncourageMessage();
   }
   checkComplete();
   wrap._checkComplete = checkComplete;
@@ -378,6 +433,7 @@ function renderBlock(block, page, setInteractionCheck) {
     case "table": return renderTableBlock(block);
     case "note": return renderNoteBlock(block);
     case "visual": return renderVisualBlock(block, page);
+    case "pathway": return renderPathwayBlock(block);
     case "dialogue": return renderDialogueBlock(block, page);
     case "sayNotSay": return renderSayNotSayBlock(block);
     case "beliefList": return renderBeliefListBlock(block);
@@ -438,6 +494,43 @@ function renderVisualBlock(block, page) {
     </div>`;
   return div;
 }
+
+/* Real interactive HTML component, not a video placeholder: a horizontal
+   Stop -> Report -> Delete pathway strip with hover feedback, an
+   entrance animation, and a sound cue when it plays in. */
+function renderPathwayBlock(block) {
+  const div = document.createElement("div");
+  div.className = "block";
+  const strip = document.createElement("div");
+  strip.className = "pathway-strip";
+  block.steps.forEach((step, i) => {
+    const box = document.createElement("div");
+    box.className = "pathway-box";
+    box.innerHTML = `<span class="pathway-num">${i + 1}</span><span class="pathway-label">${escapeHtml(step)}</span>`;
+    strip.appendChild(box);
+    if (i < block.steps.length - 1) {
+      const arrow = document.createElement("div");
+      arrow.className = "pathway-arrow";
+      arrow.innerHTML = svgIcon("chevronDown", 18);
+      strip.appendChild(arrow);
+    }
+  });
+  div.appendChild(strip);
+
+  if (typeof gsap !== "undefined") {
+    const boxes = strip.querySelectorAll(".pathway-box");
+    const arrows = strip.querySelectorAll(".pathway-arrow");
+    gsap.set(boxes, { autoAlpha: 0, y: 14 });
+    gsap.set(arrows, { autoAlpha: 0, scale: 0.6 });
+    const tl = gsap.timeline({ delay: 0.15 });
+    boxes.forEach((b, i) => {
+      tl.to(b, { autoAlpha: 1, y: 0, duration: 0.35, ease: "back.out(1.6)", onStart: () => SFX.select() }, i * 0.22);
+      if (arrows[i]) tl.to(arrows[i], { autoAlpha: 1, scale: 1, duration: 0.25, ease: "power1.out" }, i * 0.22 + 0.18);
+    });
+  }
+  return div;
+}
+
 function renderBeliefListBlock(block) {
   const div = document.createElement("div");
   div.className = "block";
@@ -1026,7 +1119,7 @@ function renderQuizPage(page, wrap) {
     });
     btnNext.disabled = !allAnswered;
     footerMsg.textContent = allAnswered ? "" : "Answer every question to continue";
-    if (allAnswered && !wasComplete) confettiAt(document.querySelector(".quiz-box:last-of-type") || wrap, true);
+    if (allAnswered && !wasComplete) chapterCompleteCelebration();
     btnNext.dataset.quizWasComplete = allAnswered ? "1" : "0";
   }
   checkQuizComplete();
@@ -1074,15 +1167,14 @@ function renderCertificateBlock(wrap) {
     <div class="cert-corner cert-corner-br"></div>
     <div class="cert-emblem-row">
       <div class="cert-emblem">
-        ${svgIcon("shield", 30)}
-        <div class="cert-emblem-label">Tamil Nadu<br>Government</div>
+        <img src="img/singappen-logo.png" alt="Singappen" class="cert-emblem-img">
+        <div class="cert-emblem-label">Singapenn Special<br>Task Force</div>
       </div>
       <div class="cert-emblem">
         <img src="img/tamilnadu-police-logo.png" alt="Tamil Nadu Police" class="cert-emblem-img">
         <div class="cert-emblem-label">Tamil Nadu<br>Police</div>
       </div>
     </div>
-    <div class="cert-id">Certificate No. ${certId} &middot; ${dateStr}</div>
     <div class="cert-badge">${svgIcon("cert", 34)}</div>
     <div class="cert-title">Certificate of Completion</div>
     <div class="cert-sub">POCSO Awareness (Age: 18+)</div>
@@ -1098,13 +1190,14 @@ function renderCertificateBlock(wrap) {
         </div>
       `).join("")}
     </div>
+    <div class="cert-id cert-id-footer">Certificate No. ${certId} &middot; ${dateStr}</div>
   `;
   wrap.appendChild(certNode);
 
   const actions = document.createElement("div");
   actions.className = "cert-actions";
   actions.innerHTML = `
-    <button class="btn btn-primary" id="printCertBtn">${svgIcon("printer", 14)} Print / Save as PDF</button>
+    <button class="btn btn-primary" id="printCertBtn"><span class="btn-icon">${svgIcon("printer", 14)}</span>Print / Save as PDF</button>
   `;
   wrap.appendChild(actions);
   actions.querySelector("#printCertBtn").addEventListener("click", () => { SFX.click(); window.print(); });
@@ -1161,19 +1254,13 @@ function renderOneCardPage(page, wrap) {
 
   const actions = document.createElement("div");
   actions.className = "cert-actions";
-  actions.innerHTML = `<button class="btn btn-primary" id="downloadShareBtn">${svgIcon("printer", 14)} Download and Share</button>`;
+  actions.innerHTML = `<button class="btn btn-primary" id="downloadShareBtn"><span class="btn-icon">${svgIcon("printer", 14)}</span>Download and Share</button>`;
   wrap.appendChild(actions);
   actions.querySelector("#downloadShareBtn").addEventListener("click", (e) => downloadAndShareOneCard(e.currentTarget));
 
-  const visual = document.createElement("div");
-  visual.className = "block";
-  visual.style.marginTop = "16px";
-  visual.innerHTML = `
-    <div class="video-slot">
-      <div class="video-slot-head">${svgIcon("video", 16)} Video / visual — placeholder</div>
-      <p>${escapeHtml(FINAL_CARD.visual)}</p>
-    </div>`;
-  wrap.appendChild(visual);
+  const endSpacer = document.createElement("div");
+  endSpacer.className = "page-end-spacer";
+  wrap.appendChild(endSpacer);
 
   btnNext.style.display = "none";
   footerMsg.textContent = "Module complete.";
